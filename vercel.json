@@ -1,7 +1,1 @@
-{
-  "version": 2,
-  "rewrites": [
-    { "source": "/api/claude", "destination": "/api/claude.js" },
-    { "source": "/(.*)",       "destination": "/public/$1"     }
-  ]
-}
+{ "version": 2, "rewrites": [ { "source": "/api/claude", "destination": "/api/claude.js" }, { "source": "/(.*)", "destination": "/public/$1" } ] } 
