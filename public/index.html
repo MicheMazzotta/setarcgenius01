@@ -1821,10 +1821,16 @@ Output ONLY valid JSON, no markdown:
 if(!window._projectDNA || window._lastConcept !== concept){
   window._projectDNA = {
     concept: concept,
-    dnaExtract: (data.gemini||'').substring(0,500)
+    gemini: data.gemini || '',
+    midjourney: data.midjourney || '',
+    dalle: data.dalle || '',
+    leonardo: data.leonardo || '',
+    ideogram: data.ideogram || '',
+    kling: data.kling || ''
   };
   window._lastConcept = concept;
   window._refineCount = 0;
+  console.log('[ArchOn] Project DNA locked:', concept.substring(0,60));
 }
 renderResults(data);saveHist(concept,data);
     document.getElementById('copyBtn').style.display='';
@@ -1858,32 +1864,49 @@ async function refinePrompt(){
   const techParams=[o.camera[sel.camera]?.val,o.lens[sel.lens]?.val,o.atm[sel.atm]?.val,isSet?OPT.set.kelvin[sel.kelvin]?.val:''].filter(Boolean).join(', ');
   // ── Use DNA to lock project identity ──
   const dna = window._projectDNA || {};
-  const dnaPrompt = dna.dnaExtract || '';
   window._refineCount = (window._refineCount||0) + 1;
+
+  // Build full DNA context from original prompts
+  const dnaContext = dna.gemini ? 
+    `ORIGINAL GEMINI PROMPT (copy all architectural elements exactly):
+${dna.gemini}
+
+ORIGINAL MIDJOURNEY PROMPT (copy all descriptors exactly):
+${dna.midjourney}
+
+ORIGINAL DALLE PROMPT:
+${dna.dalle}` : 'No DNA available — use concept as reference.';
 
   const sys=`You are an elite ${isSet?'Set Design Director for Brazilian broadcast TV':'architectural visualization expert'} — the AI engine behind ArchOn, created by Michelangelo Mazzotta.
 
-CRITICAL CONSISTENCY RULE — THIS IS A REFINEMENT, NOT A NEW PROJECT:
-You MUST preserve 100% of the original project DNA. Do NOT invent new elements.
+THIS IS REFINEMENT #${window._refineCount} — NOT A NEW PROJECT. NEVER CREATE A DIFFERENT PROJECT.
 
-ORIGINAL PROJECT DNA (extract from first generation — preserve ALL of this):
-${dnaPrompt}
+══════════════════════════════════
+ORIGINAL PROJECT DNA — COPY EXACTLY
+══════════════════════════════════
+${dnaContext}
 
-ORIGINAL BRIEFING (the law — never change):
+ORIGINAL BRIEFING (sacred — never change):
 "${concept}"
+══════════════════════════════════
 
-YOUR ONLY TASK: Keep every architectural element, material, style, form, proportion, color palette and spatial composition IDENTICAL to the original. ONLY modify:
-- Camera angle and position
-- Lens focal length
-- Lighting condition and atmosphere
-- Time of day
+YOUR ONLY JOB: Take the original prompts above and ONLY change the camera angle, lens and lighting. 
+Copy every other word, material, form, shape, color, texture and architectural element VERBATIM from the original.
 
-NEW CAMERA/LIGHTING PARAMETERS TO APPLY: ${techParams}
+Do NOT:
+- Change materials (if original says "concrete", keep "concrete")
+- Change forms (if original says "flat roof", keep "flat roof")  
+- Change spatial elements (if original says "double height", keep "double height")
+- Change style or mood beyond lighting
+- Invent new architectural elements
+- Generate a different building or set
 
-IMPORTANT: If the original had specific materials (wood, concrete, stone, glass), shapes (curved roof, flat slab, cantilever), or spatial characteristics (open plan, double height, courtyard) — they MUST appear unchanged in every output.
+DO:
+- Apply these new camera/lighting parameters: ${techParams}
+- Keep everything else identical to the original prompts
 
 Output ONLY valid JSON, no markdown:
-{"gemini":string,"midjourney":string,"dalle":string,"ideogram":string,"leonardo":string,"kling":string,"summary":"<PT-BR: confirme que a mesma arquitetura foi mantida e descreva apenas o que mudou na câmera/luz>"}`;
+{"gemini":string,"midjourney":string,"dalle":string,"ideogram":string,"leonardo":string,"kling":string,"summary":"<PT-BR 1 frase: confirme materiais mantidos + descreva só o que mudou em câmera/luz>"}`;
 
   try{
     const raw=await callAPI(sys,'Refine maintaining exact DNA.',3500);
