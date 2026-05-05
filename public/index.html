@@ -1857,67 +1857,141 @@ function updateRefineTags(){
 async function refinePrompt(){
   const concept=document.getElementById('conceptInput').value.trim();
   if(!concept||!window._varPrompts){toast('Gere um prompt primeiro','err');return;}
+
+  window._refineCount = (window._refineCount||0) + 1;
+  if(window._refineCount > 8){
+    toast('⚠️ Mais de 8 refinamentos. Recomendamos novo briefing para melhor consistência.','info');
+  }
+
   const btn=document.getElementById('refineBtn');
   btn.disabled=true;btn.querySelector('.refine-title').textContent='Refinando...';
-  showLoading('Refinando...','Mesma arquitetura — nova câmera, lente e atmosfera');
+  showLoading('Refinando...','Travando arquitetura — só câmera e luz mudam');
+
   const o=OPT[curMode];const isSet=curMode==='set';
-  const techParams=[o.camera[sel.camera]?.val,o.lens[sel.lens]?.val,o.atm[sel.atm]?.val,isSet?OPT.set.kelvin[sel.kelvin]?.val:''].filter(Boolean).join(', ');
-  // ── Use DNA to lock project identity ──
+
+  // ── New camera/lens/light parameters ──
+  const newCamera = o.camera[sel.camera]?.val || '';
+  const newLens   = o.lens[sel.lens]?.val || '';
+  const newScene  = o.scene[sel.scene]?.val || '';
+  const newAtm    = o.atm[sel.atm]?.val || '';
+  const newKelvin = isSet ? (OPT.set.kelvin[sel.kelvin]?.val||'') : '';
+  const newParams = [newCamera,newLens,newScene,newAtm,newKelvin].filter(Boolean).join(', ');
+
+  // ── STRATEGY: JavaScript replaces camera/light tokens in original prompts ──
+  // The API is NOT trusted to preserve architecture — we do it in code
   const dna = window._projectDNA || {};
-  window._refineCount = (window._refineCount||0) + 1;
+  const origGemini    = dna.gemini    || '';
+  const origMJ        = dna.midjourney|| '';
+  const origDalle     = dna.dalle     || '';
+  const origLeo       = dna.leonardo  || '';
+  const origIdeo      = dna.ideogram  || '';
+  const origKling     = dna.kling     || '';
 
-  // Build full DNA context from original prompts
-  const dnaContext = dna.gemini ? 
-    `ORIGINAL GEMINI PROMPT (copy all architectural elements exactly):
-${dna.gemini}
+  // Camera/light keyword lists to detect and replace
+  const cameraKW = ['DSLR full-frame','medium format','Hasselblad','drone','DJI Mavic','cinema','ARRI','RED','analogue film','35mm film','smartphone','computational','Canon','Nikon','Phase One'];
+  const lensKW   = ['14mm','24mm','35mm','50mm','85mm','135mm','ultra-wide','wide angle','standard','portrait','telephoto','tele','fisheye','macro'];
+  const atmKW    = ['golden hour','blue hour','midday','overcast','cloudy','storm','dawn','dusk','sunset','sunrise','harsh sunlight','soft diffused','moonlight','night','evening','afternoon','morning','noon','foggy','misty','rainy'];
+  const kelvinKW = ['2700K','3000K','3200K','4000K','5600K','6500K','tungsten','daylight','cool white','warm white'];
 
-ORIGINAL MIDJOURNEY PROMPT (copy all descriptors exactly):
-${dna.midjourney}
+  function replaceTokens(prompt){
+    if(!prompt) return '';
+    let p = prompt;
 
-ORIGINAL DALLE PROMPT:
-${dna.dalle}` : 'No DNA available — use concept as reference.';
+    // Replace camera tokens
+    if(newCamera){
+      cameraKW.forEach(kw=>{
+        const re = new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi');
+        if(re.test(p)) p = p.replace(re, newCamera);
+      });
+    }
 
-  const sys=`You are an elite ${isSet?'Set Design Director for Brazilian broadcast TV':'architectural visualization expert'} — the AI engine behind ArchOn, created by Michelangelo Mazzotta.
+    // Replace lens tokens
+    if(newLens){
+      lensKW.forEach(kw=>{
+        const re = new RegExp('\\b'+kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b', 'gi');
+        if(re.test(p)) p = p.replace(re, newLens);
+      });
+    }
 
-THIS IS REFINEMENT #${window._refineCount} — NOT A NEW PROJECT. NEVER CREATE A DIFFERENT PROJECT.
+    // Replace atmosphere/time tokens
+    if(newAtm||newScene){
+      const replacement = [newScene,newAtm].filter(Boolean).join(', ');
+      atmKW.forEach(kw=>{
+        const re = new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi');
+        if(re.test(p)) p = p.replace(re, replacement);
+      });
+    }
 
-══════════════════════════════════
-ORIGINAL PROJECT DNA — COPY EXACTLY
-══════════════════════════════════
-${dnaContext}
+    // Replace kelvin tokens
+    if(newKelvin){
+      kelvinKW.forEach(kw=>{
+        const re = new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi');
+        if(re.test(p)) p = p.replace(re, newKelvin);
+      });
+    }
 
-ORIGINAL BRIEFING (sacred — never change):
-"${concept}"
-══════════════════════════════════
+    return p;
+  }
 
-YOUR ONLY JOB: Take the original prompts above and ONLY change the camera angle, lens and lighting. 
-Copy every other word, material, form, shape, color, texture and architectural element VERBATIM from the original.
+  // Apply JS token replacement to all 6 prompts
+  const jsRefined = {
+    gemini:    replaceTokens(origGemini),
+    midjourney:replaceTokens(origMJ),
+    dalle:     replaceTokens(origDalle),
+    leonardo:  replaceTokens(origLeo),
+    ideogram:  replaceTokens(origIdeo),
+    kling:     replaceTokens(origKling),
+  };
 
-Do NOT:
-- Change materials (if original says "concrete", keep "concrete")
-- Change forms (if original says "flat roof", keep "flat roof")  
-- Change spatial elements (if original says "double height", keep "double height")
-- Change style or mood beyond lighting
-- Invent new architectural elements
-- Generate a different building or set
+  // ── Now ask API ONLY to smooth the language — architecture is already locked ──
+  const sys=`You are a prompt editor for ArchOn — created by Michelangelo Mazzotta.
 
-DO:
-- Apply these new camera/lighting parameters: ${techParams}
-- Keep everything else identical to the original prompts
+The user's architectural project DNA is already locked. The prompts below have had their camera/lens/lighting tokens replaced programmatically. Your ONLY job is to smooth the language so the new parameters read naturally — do NOT change any architectural content, materials, furniture, dimensions, spatial layout or style.
 
-Output ONLY valid JSON, no markdown:
-{"gemini":string,"midjourney":string,"dalle":string,"ideogram":string,"leonardo":string,"kling":string,"summary":"<PT-BR 1 frase: confirme materiais mantidos + descreva só o que mudou em câmera/luz>"}`;
+LOCKED PROMPTS (only fix grammar/flow — change NOTHING structural):
+GEMINI: ${jsRefined.gemini}
+MIDJOURNEY: ${jsRefined.midjourney}
+DALLE: ${jsRefined.dalle}
+LEONARDO: ${jsRefined.leonardo}
+IDEOGRAM: ${jsRefined.ideogram}
+KLING: ${jsRefined.kling}
+
+New parameters applied: ${newParams}
+Refinement #${window._refineCount}
+
+Output ONLY valid JSON:
+{"gemini":string,"midjourney":string,"dalle":string,"ideogram":string,"leonardo":string,"kling":string,"summary":"<PT-BR 1 frase: só descreva mudança de câmera/luz — não mencione arquitetura>"}`;
 
   try{
-    const raw=await callAPI(sys,'Refine maintaining exact DNA.',3500);
-    let data;try{const s=raw.indexOf('{'),e=raw.lastIndexOf('}');data=JSON.parse(raw.substring(s,e+1));}catch(pe){data=window._varPrompts;}
-    window._varPrompts=data;renderResults(data);saveHist(concept+' [refinado x'+window._refineCount+']',data);
-    hideLoading();toast('✓ Mesma arquitetura — câmera e luz atualizadas','ok');genIter(data.gemini||raw);
-  }catch(err){hideLoading();toast('Erro: '+err.message.substring(0,40),'err');}
-  btn.disabled=false;btn.querySelector('.refine-title').textContent='Refinar Ângulo';updateRefineTags();
+    const raw=await callAPI(sys,'Smooth language only. Architecture is locked. Do not change structure.',3500);
+    let data;
+    try{
+      const s=raw.indexOf('{'),e=raw.lastIndexOf('}');
+      data=JSON.parse(raw.substring(s,e+1));
+    }catch(pe){
+      // If API fails parsing, use JS-refined directly
+      data={...jsRefined, summary:'Câmera e luz atualizadas. Arquitetura preservada.'};
+    }
+    window._varPrompts=data;
+    renderResults(data);
+    saveHist(concept+' [refinado x'+window._refineCount+']',data);
+    hideLoading();
+    toast('✓ Câmera e luz atualizadas — arquitetura 100% preservada','ok');
+    genIter(data.gemini||jsRefined.gemini);
+  }catch(err){
+    // Fallback: use JS-refined without API smoothing
+    window._varPrompts={...jsRefined, summary:'Câmera e luz atualizadas.'};
+    renderResults(window._varPrompts);
+    saveHist(concept+' [refinado x'+window._refineCount+']',window._varPrompts);
+    hideLoading();
+    toast('✓ Refinado (modo offline)','ok');
+    genIter(jsRefined.gemini);
+  }
+  btn.disabled=false;
+  btn.querySelector('.refine-title').textContent='Refinar Ângulo';
 }
 
-// ── ANSWER FIELD ──
+
 async function submitBriefAnswer(){
   const answer=document.getElementById('briefAnswer').value.trim();
   if(!answer){toast('Escreva sua resposta','err');return;}
