@@ -846,6 +846,19 @@ textarea.admin-ta{width:100%;height:100px;background:var(--bg3);border:1px solid
       </div>
     </button>
 
+    <!-- GEMINI REFINE BUTTON -->
+    <button class="refine-btn" id="geminiRefineBtn" onclick="geminiRefine()" title="Gera prompt de refinamento para colar no Gemini — mantém consistência na mesma conversa" style="display:none;margin-top:6px;border-color:rgba(63,139,196,.4);background:rgba(63,139,196,.06)">
+      <div class="refine-top">
+        <div class="refine-ico" style="color:#3F8BC4">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        </div>
+        <div>
+          <div class="refine-title" style="color:#3F8BC4">Refinar no Gemini</div>
+          <div class="refine-sub">Cole na mesma conversa — preserva tudo</div>
+        </div>
+      </div>
+    </button>
+
     <button class="reset-btn" onclick="resetAll()">✕ Limpar e recomeçar</button>
   </div>
 </div>
@@ -1747,6 +1760,75 @@ function getRemainingToday(){
   if(currentPlan!=='free')return Infinity;
   return Math.max(0,FREE_LIMIT-getDailyCount());
 }
+
+// ══════════════════════════════════════
+// GEMINI REFINE — generates continuation prompt
+// ══════════════════════════════════════
+function geminiRefine(){
+  const concept = document.getElementById('conceptInput').value.trim();
+  if(!concept||!window._projectDNA){toast('Gere um prompt primeiro','err');return;}
+
+  const o=OPT[curMode]; const isSet=curMode==='set';
+  const newCamera = o.camera[sel.camera]?.val || '';
+  const newLens   = o.lens[sel.lens]?.val || '';
+  const newScene  = o.scene[sel.scene]?.val || '';
+  const newAtm    = o.atm[sel.atm]?.val || '';
+  const newKelvin = isSet ? (OPT.set.kelvin[sel.kelvin]?.val||'') : '';
+  const newParams = [newCamera,newLens,newScene,newAtm,newKelvin].filter(Boolean).join(', ');
+
+  const geminiContinuation = `Mantenha EXATAMENTE esta mesma imagem que você gerou — mesmos móveis, mesmas posições, mesmos materiais, mesma arquitetura, mesmas proporções, mesmos objetos decorativos e quantidades.
+
+Altere APENAS os seguintes parâmetros de câmera e iluminação:
+${newCamera ? '• Câmera: ' + newCamera : ''}
+${newLens ? '• Lente: ' + newLens : ''}
+${newScene ? '• Tipo de cena: ' + newScene : ''}
+${newAtm ? '• Atmosfera/Luz: ' + newAtm : ''}
+${newKelvin ? '• Temperatura de cor: ' + newKelvin : ''}
+
+NÃO altere absolutamente nada mais. O projeto arquitetônico, o mobiliário e todos os elementos visuais devem ser idênticos à imagem anterior. Apenas a câmera e a iluminação mudam.
+
+Gere a nova imagem com estas configurações.`.trim();
+
+  // Show in a modal/toast for easy copy
+  showGeminiModal(geminiContinuation);
+}
+
+function showGeminiModal(prompt){
+  const existing = document.getElementById('geminiModal');
+  if(existing) existing.remove();
+
+  const ov = document.createElement('div');
+  ov.id = 'geminiModal';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(7,9,13,.95);z-index:700;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(8px)';
+  ov.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid rgba(63,139,196,.4);border-radius:8px;width:560px;max-width:94vw;overflow:hidden">
+      <div style="height:2px;background:#3F8BC4"></div>
+      <div style="padding:24px 26px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3F8BC4" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+          <div style="font-family:var(--fd);font-size:14px;font-weight:700;color:#3F8BC4;letter-spacing:1px">REFINAMENTO GEMINI</div>
+        </div>
+        <div style="font-family:var(--fm);font-size:10px;color:var(--tx3);margin-bottom:14px">Cole este prompt na MESMA conversa do Gemini onde você gerou a imagem anterior</div>
+        <textarea id="geminiPromptText" readonly style="width:100%;height:200px;background:var(--bg3);border:1px solid var(--bd2);border-radius:4px;padding:12px;color:var(--tx);font-family:var(--fm);font-size:11px;line-height:1.7;resize:none;outline:none">${prompt}</textarea>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button onclick="navigator.clipboard.writeText(document.getElementById('geminiPromptText').value);toast('Copiado! Cole na mesma conversa do Gemini','ok')" style="flex:1;padding:11px;background:#3F8BC4;border:none;border-radius:4px;color:#fff;font-family:var(--fd);font-size:12px;font-weight:700;letter-spacing:1px;cursor:pointer">
+            📋 COPIAR E COLAR NO GEMINI
+          </button>
+          <button onclick="document.getElementById('geminiModal').remove()" style="padding:11px 16px;background:transparent;border:1px solid var(--bd2);border-radius:4px;color:var(--tx3);font-family:var(--fd);font-size:11px;cursor:pointer">
+            Fechar
+          </button>
+        </div>
+        <div style="margin-top:10px;padding:10px;background:rgba(63,139,196,.06);border-radius:4px;border-left:2px solid #3F8BC4">
+          <div style="font-family:var(--fm);font-size:9px;color:var(--tx3);line-height:1.8">
+            💡 <strong style="color:var(--tx2)">Como usar:</strong> Abra o Gemini na mesma aba onde gerou a imagem anterior → Cole este prompt no campo de texto → Envie. O Gemini vai manter a mesma cena e só mudar câmera e luz.
+          </div>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
+}
+
 function updateGenBtnLabel(){
   const btn=document.getElementById('genBtn');if(!btn)return;
   if(currentPlan==='free'){
@@ -1838,6 +1920,7 @@ renderResults(data);saveHist(concept,data);
     document.getElementById('vidBtn').style.display='';
     document.getElementById('resSub').textContent='// 6 variações prontas';
     const rb=document.getElementById('refineBtn');if(rb)rb.style.display='block';
+    const gb=document.getElementById('geminiRefineBtn');if(gb)gb.style.display='block';
     updateRefineTags();
     // Increment free daily counter
     if(currentPlan==='free'){incDailyCount();}updateGenBtnLabel();
@@ -1860,7 +1943,7 @@ async function refinePrompt(){
 
   window._refineCount = (window._refineCount||0) + 1;
   if(window._refineCount > 8){
-    toast('⚠️ Mais de 8 refinamentos. Recomendamos novo briefing para melhor consistência.','info');
+    toast('⚠️ Mais de 8 refinamentos. Recomendamos novo briefing.','info');
   }
 
   const btn=document.getElementById('refineBtn');
@@ -1869,7 +1952,7 @@ async function refinePrompt(){
 
   const o=OPT[curMode];const isSet=curMode==='set';
 
-  // ── New camera/lens/light parameters ──
+  // Get new parameters
   const newCamera = o.camera[sel.camera]?.val || '';
   const newLens   = o.lens[sel.lens]?.val || '';
   const newScene  = o.scene[sel.scene]?.val || '';
@@ -1877,115 +1960,89 @@ async function refinePrompt(){
   const newKelvin = isSet ? (OPT.set.kelvin[sel.kelvin]?.val||'') : '';
   const newParams = [newCamera,newLens,newScene,newAtm,newKelvin].filter(Boolean).join(', ');
 
-  // ── STRATEGY: JavaScript replaces camera/light tokens in original prompts ──
-  // The API is NOT trusted to preserve architecture — we do it in code
   const dna = window._projectDNA || {};
-  const origGemini    = dna.gemini    || '';
-  const origMJ        = dna.midjourney|| '';
-  const origDalle     = dna.dalle     || '';
-  const origLeo       = dna.leonardo  || '';
-  const origIdeo      = dna.ideogram  || '';
-  const origKling     = dna.kling     || '';
+  const origMJ = dna.midjourney || window._varPrompts?.midjourney || '';
 
-  // Camera/light keyword lists to detect and replace
-  const cameraKW = ['DSLR full-frame','medium format','Hasselblad','drone','DJI Mavic','cinema','ARRI','RED','analogue film','35mm film','smartphone','computational','Canon','Nikon','Phase One'];
-  const lensKW   = ['14mm','24mm','35mm','50mm','85mm','135mm','ultra-wide','wide angle','standard','portrait','telephoto','tele','fisheye','macro'];
-  const atmKW    = ['golden hour','blue hour','midday','overcast','cloudy','storm','dawn','dusk','sunset','sunrise','harsh sunlight','soft diffused','moonlight','night','evening','afternoon','morning','noon','foggy','misty','rainy'];
-  const kelvinKW = ['2700K','3000K','3200K','4000K','5600K','6500K','tungsten','daylight','cool white','warm white'];
+  // ── Extract Midjourney seed if present ──
+  const seedMatch = origMJ.match(/--seed\s+(\d+)/i);
+  const seedStr = seedMatch ? ` --seed ${seedMatch[1]}` : '';
 
-  function replaceTokens(prompt){
-    if(!prompt) return '';
-    let p = prompt;
+  // ── Extract MJ technical flags (--ar, --v, --q, --style) ──
+  const mjFlags = (origMJ.match(/--(ar|v|q|style|chaos|no|stylize|weird)\s+[\w:.]+/gi)||[]).join(' ');
 
-    // Replace camera tokens
-    if(newCamera){
-      cameraKW.forEach(kw=>{
-        const re = new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi');
-        if(re.test(p)) p = p.replace(re, newCamera);
-      });
-    }
+  // ── Get the ARCHITECTURAL CORE: remove all camera/light/technical descriptors from original ──
+  // This extracts ONLY the architecture/materials/style content
+  const sys=`You are the ArchOn consistency engine — created by Michelangelo Mazzotta.
 
-    // Replace lens tokens
-    if(newLens){
-      lensKW.forEach(kw=>{
-        const re = new RegExp('\\b'+kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b', 'gi');
-        if(re.test(p)) p = p.replace(re, newLens);
-      });
-    }
+TASK: Extract ONLY the architectural/spatial/material core from the original prompt, removing all camera, lens and lighting references. Then rebuild the prompt with the new camera/lighting parameters injected.
 
-    // Replace atmosphere/time tokens
-    if(newAtm||newScene){
-      const replacement = [newScene,newAtm].filter(Boolean).join(', ');
-      atmKW.forEach(kw=>{
-        const re = new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi');
-        if(re.test(p)) p = p.replace(re, replacement);
-      });
-    }
+ORIGINAL PROJECT DNA:
+Gemini: ${dna.gemini||''}
+Midjourney: ${origMJ}
+Dalle: ${dna.dalle||''}
+Leonardo: ${dna.leonardo||''}
+Ideogram: ${dna.ideogram||''}
+Kling: ${dna.kling||''}
 
-    // Replace kelvin tokens
-    if(newKelvin){
-      kelvinKW.forEach(kw=>{
-        const re = new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'gi');
-        if(re.test(p)) p = p.replace(re, newKelvin);
-      });
-    }
+ORIGINAL BRIEFING: "${concept}"
 
-    return p;
-  }
+NEW CAMERA/LIGHTING TO INJECT: ${newParams}
 
-  // Apply JS token replacement to all 6 prompts
-  const jsRefined = {
-    gemini:    replaceTokens(origGemini),
-    midjourney:replaceTokens(origMJ),
-    dalle:     replaceTokens(origDalle),
-    leonardo:  replaceTokens(origLeo),
-    ideogram:  replaceTokens(origIdeo),
-    kling:     replaceTokens(origKling),
-  };
-
-  // ── Now ask API ONLY to smooth the language — architecture is already locked ──
-  const sys=`You are a prompt editor for ArchOn — created by Michelangelo Mazzotta.
-
-The user's architectural project DNA is already locked. The prompts below have had their camera/lens/lighting tokens replaced programmatically. Your ONLY job is to smooth the language so the new parameters read naturally — do NOT change any architectural content, materials, furniture, dimensions, spatial layout or style.
-
-LOCKED PROMPTS (only fix grammar/flow — change NOTHING structural):
-GEMINI: ${jsRefined.gemini}
-MIDJOURNEY: ${jsRefined.midjourney}
-DALLE: ${jsRefined.dalle}
-LEONARDO: ${jsRefined.leonardo}
-IDEOGRAM: ${jsRefined.ideogram}
-KLING: ${jsRefined.kling}
-
-New parameters applied: ${newParams}
-Refinement #${window._refineCount}
+RULES — ABSOLUTE:
+1. Keep ALL architectural elements: building type, shapes, volumes, proportions, dimensions
+2. Keep ALL materials: every specific material mentioned (concrete, wood, glass, stone, etc)
+3. Keep ALL furniture: exact pieces, quantities and positions
+4. Keep ALL spatial elements: room layout, openings, levels, connections
+5. Keep ALL style descriptors: architectural style, era, references
+6. REPLACE ONLY: camera type, lens mm, lighting condition, time of day, atmosphere
+7. For Midjourney: keep all --flags exactly as original, only change descriptive text
+8. Add to Midjourney prompt: ${seedStr ? seedStr : '--seed [mantém seed original se houver]'}
 
 Output ONLY valid JSON:
-{"gemini":string,"midjourney":string,"dalle":string,"ideogram":string,"leonardo":string,"kling":string,"summary":"<PT-BR 1 frase: só descreva mudança de câmera/luz — não mencione arquitetura>"}`;
+{"gemini":string,"midjourney":string,"dalle":string,"ideogram":string,"leonardo":string,"kling":string,"summary":"<PT-BR: liste exatamente o que mudou em câmera/luz e confirme que mobiliário e arquitetura foram preservados>"}
+
+IMPORTANT: The summary must tell the user to use --seed in Midjourney to lock consistency.`;
 
   try{
-    const raw=await callAPI(sys,'Smooth language only. Architecture is locked. Do not change structure.',3500);
+    const raw=await callAPI(sys,'Preserve architecture 100%. Only change camera and lighting.',4000);
     let data;
     try{
       const s=raw.indexOf('{'),e=raw.lastIndexOf('}');
       data=JSON.parse(raw.substring(s,e+1));
     }catch(pe){
-      // If API fails parsing, use JS-refined directly
-      data={...jsRefined, summary:'Câmera e luz atualizadas. Arquitetura preservada.'};
+      data=window._varPrompts;
     }
+
+    // ── FORCE inject seed into MJ prompt if we have it ──
+    if(seedStr && data.midjourney && !data.midjourney.includes('--seed')){
+      data.midjourney = data.midjourney.replace(/--ar/i, seedStr+' --ar');
+    }
+
+    // ── FORCE inject new camera/lens into prompts if not already there ──
+    if(newCamera && data.gemini && !data.gemini.toLowerCase().includes(newCamera.toLowerCase().split(' ')[0])){
+      data.gemini = newCamera + ', ' + newLens + ', ' + data.gemini;
+    }
+    if(newCamera && data.midjourney && !data.midjourney.toLowerCase().includes(newCamera.toLowerCase().split(' ')[0])){
+      data.midjourney = newCamera + ' ' + newLens + ' ' + data.midjourney;
+    }
+
     window._varPrompts=data;
     renderResults(data);
     saveHist(concept+' [refinado x'+window._refineCount+']',data);
     hideLoading();
-    toast('✓ Câmera e luz atualizadas — arquitetura 100% preservada','ok');
-    genIter(data.gemini||jsRefined.gemini);
+
+    // Show seed tip if no seed found
+    if(!seedMatch){
+      setTimeout(()=>{
+        toast('💡 Dica: reaja com 📩 no Discord para obter a seed e travar consistência no MJ','info');
+      },2000);
+    }
+
+    toast('✓ Câmera e luz atualizadas','ok');
+    genIter(data.gemini||'');
   }catch(err){
-    // Fallback: use JS-refined without API smoothing
-    window._varPrompts={...jsRefined, summary:'Câmera e luz atualizadas.'};
-    renderResults(window._varPrompts);
-    saveHist(concept+' [refinado x'+window._refineCount+']',window._varPrompts);
     hideLoading();
-    toast('✓ Refinado (modo offline)','ok');
-    genIter(jsRefined.gemini);
+    toast('Erro: '+err.message.substring(0,40),'err');
   }
   btn.disabled=false;
   btn.querySelector('.refine-title').textContent='Refinar Ângulo';
