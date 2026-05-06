@@ -1315,14 +1315,13 @@ const hist=JSON.parse(localStorage.getItem('sag_h')||'[]');
 async function callAPI(system, userMsg, maxTokens=1500){
   const agentKey = getKey('anthropic');
   const headers = {'Content-Type':'application/json'};
-  const endpoint = agentKey ? 'https://api.anthropic.com/v1/messages' : '/api/claude';
-  if(agentKey){ headers['x-api-key']=agentKey; headers['anthropic-version']='2023-06-01'; }
+  const endpoint = '/api/claude';
 
   const body = {
     model: 'claude-sonnet-4-20250514',
     max_tokens: Math.min(maxTokens, 4000),
-    system: KNOWLEDGE + '\n\n' + system,
-    messages: [{ role:'user', content: userMsg }]
+    system: (KNOWLEDGE||'') + '\n\n' + (system||''),
+    messages: [{ role:'user', content: String(userMsg||'') }]
   };
 
   const resp = await fetch(endpoint, {
@@ -1332,27 +1331,35 @@ async function callAPI(system, userMsg, maxTokens=1500){
   });
   if(!resp.ok){
     const err = await resp.json().catch(()=>({}));
-    throw new Error(err?.error?.message || 'API error '+resp.status);
+    throw new Error((err?.error?.message)||('API error '+resp.status));
   }
   const data = await resp.json();
+  if(data.error) throw new Error(data.error.message||'API error');
   return data.content?.[0]?.text || '';
 }
 
 async function callAPIImg(system, userMsg, b64, mimeType, maxTokens=1200){
-  const agentKey = getKey('anthropic');
   const headers = {'Content-Type':'application/json'};
-  const endpoint = agentKey ? 'https://api.anthropic.com/v1/messages' : '/api/claude';
-  if(agentKey){ headers['x-api-key']=agentKey; headers['anthropic-version']='2023-06-01'; }
+  const endpoint = '/api/claude';
+
+  const mt = (mimeType||'image/jpeg').replace('image/jpg','image/jpeg');
 
   const body = {
     model: 'claude-sonnet-4-20250514',
     max_tokens: Math.min(maxTokens, 2000),
-    system: system,
+    system: system||'You are an expert architect and art director.',
     messages: [{
       role: 'user',
       content: [
-        { type:'image', source:{ type:'base64', media_type: mimeType||'image/jpeg', data: b64 } },
-        { type:'text', text: userMsg }
+        {
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: mt,
+            data: b64
+          }
+        },
+        { type: 'text', text: userMsg||'Analise esta imagem.' }
       ]
     }]
   };
@@ -1364,14 +1371,14 @@ async function callAPIImg(system, userMsg, b64, mimeType, maxTokens=1200){
   });
   if(!resp.ok){
     const err = await resp.json().catch(()=>({}));
-    throw new Error(err?.error?.message || 'API error '+resp.status);
+    throw new Error((err?.error?.message)||('API error '+resp.status));
   }
   const data = await resp.json();
+  if(data.error) throw new Error(data.error.message||'API error');
   return data.content?.[0]?.text || '';
 }
 
 async function genIter(prompt){
-  // Iterative generation helper — used by refine
   return prompt;
 }
 
