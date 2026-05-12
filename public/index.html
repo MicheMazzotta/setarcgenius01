@@ -380,6 +380,13 @@ textarea.concept::placeholder{color:var(--tx3);font-size:12px}
 .rtitle{font-family:var(--fd);font-size:16px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--tx)}
 .rsub{font-family:var(--fm);font-size:9px;color:var(--tx3);margin-top:2px;letter-spacing:.5px;text-transform:uppercase}
 .rbody{flex:1;overflow-y:auto;padding:10px}
+.pcard{border:1px solid var(--bd2);border-radius:6px;margin-bottom:7px;overflow:hidden;background:var(--bg3)}
+.pcard-head{display:flex;align-items:center;gap:7px;padding:7px 10px;border-bottom:1px solid var(--bd);background:rgba(255,255,255,.02)}
+.pcard-ico{font-size:14px;opacity:.7}
+.pcard-label{font-family:var(--fd);font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--tx2);flex:1}
+.pcard-copy{background:transparent;border:1px solid var(--bd);border-radius:3px;padding:3px 6px;cursor:pointer;color:var(--tx3);display:flex;align-items:center;transition:all .2s}
+.pcard-copy:hover{border-color:var(--mode-c);color:var(--mode-c)}
+.pcard-txt{padding:10px 12px;font-size:12px;line-height:1.75;color:var(--tx);font-family:var(--fb);white-space:pre-wrap;word-break:break-word}
 .sumbox{
   background:var(--bg3);border:1px solid var(--bd2);border-radius:6px;
   padding:11px 13px;font-size:13px;line-height:1.75;color:var(--tx);margin-bottom:8px;font-family:var(--fb)
@@ -1382,6 +1389,145 @@ async function genIter(prompt){
   return prompt;
 }
 
+
+// ══════════════════════════════════════
+// UI UTILITY FUNCTIONS
+// ══════════════════════════════════════
+
+function toast(msg, type='ok', duration=3200){
+  const t=document.createElement('div');
+  const colors={ok:'#3F8BC4',err:'#8D0000',info:'#666'};
+  t.style.cssText=`position:fixed;bottom:24px;right:24px;z-index:9999;padding:10px 16px;border-radius:6px;font-family:var(--fd);font-size:12px;font-weight:600;letter-spacing:.5px;color:#fff;background:${colors[type]||colors.ok};box-shadow:0 4px 20px rgba(0,0,0,.4);transition:opacity .4s;max-width:320px;line-height:1.4`;
+  t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(()=>{t.style.opacity='0';setTimeout(()=>t.remove(),400);},duration);
+}
+
+function openModal(id){
+  const m=document.getElementById(id);
+  if(m)m.style.display='flex';
+}
+function closeModal(id){
+  const m=document.getElementById(id);
+  if(m)m.style.display='none';
+}
+
+function openPanel(id){
+  const p=document.getElementById(id);
+  if(p){p.style.display=p.style.display==='none'?'flex':'none';}
+}
+
+function togglePanel(id,btn){
+  const p=document.getElementById(id);
+  if(!p)return;
+  const isOpen=p.classList.contains('open');
+  // Close all panels
+  document.querySelectorAll('.panel').forEach(el=>el.classList.remove('open'));
+  document.querySelectorAll('.fbtn').forEach(el=>el.classList.remove('active'));
+  if(!isOpen){p.classList.add('open');if(btn)btn.classList.add('active');}
+}
+
+function updateGenBtnLabel(){
+  const btn=document.getElementById('genBtn');if(!btn)return;
+  const icon='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13,2 3,14 12,14 11,22 21,10 12,10"/></svg>';
+  if(currentPlan==='trial'&&isTrialActive()){
+    const d=trialDaysLeft();
+    btn.innerHTML=icon+` Gerar Prompts <span style="font-size:10px;opacity:.7;font-family:var(--fm)">(trial: ${d}d)</span>`;
+  } else if(currentPlan==='free'){
+    const rem=getRemainingToday();
+    btn.innerHTML=icon+` Gerar Prompts <span style="font-size:10px;opacity:.7;font-family:var(--fm)">(${rem}/3 hoje)</span>`;
+  } else {
+    btn.innerHTML=icon+' Gerar Prompts';
+  }
+}
+
+function updatePlanChip(){
+  const chip=document.getElementById('planChip');if(!chip)return;
+  chip.className='plan-chip';
+  checkPlanStatus();
+  if(currentPlan==='anual'){chip.textContent='★ ANUAL';chip.classList.add('anual');}
+  else if(currentPlan==='trial'&&isTrialActive()){
+    const d=trialDaysLeft();
+    chip.textContent='BETA·'+d+'d';
+    chip.style.cssText='border-color:var(--ok);color:var(--ok);background:rgba(0,201,122,.07)';
+  } else if(currentPlan==='expired'||(currentPlan==='trial'&&isTrialExpired())){
+    chip.textContent='EXPIRADO';
+    chip.style.cssText='border-color:var(--err);color:var(--err)';
+  } else {
+    chip.textContent='FREE';chip.classList.add('free-badge');
+  }
+}
+
+function activatePlan(plan,e){
+  if(e&&e.stopPropagation)e.stopPropagation();
+  const code=prompt('Cole seu código de ativação (ex: AON-BETA-042 para trial · AON-ANUAL-2025 para plano anual):');
+  if(!code)return;
+  const up=code.trim().toUpperCase();
+  if(validateTrialCode(up)){
+    initTrial(up);updatePlanChip();closeModal('planModal');
+    toast('🎉 Trial ativado! 7 dias de acesso completo!','ok');return;
+  }
+  if(['AON-ANUAL-2025','AON-ANUAL-2026','DEMO'].includes(up)){
+    currentPlan='anual';localStorage.setItem('sag_plan','anual');
+    updatePlanChip();closeModal('planModal');
+    toast('Plano Anual ativado!','ok');return;
+  }
+  toast('Código inválido. Verifique e tente novamente.','err');
+}
+
+function applyTrialCode(){
+  const inp=document.getElementById('trialCodeInput');
+  if(!inp)return;
+  const up=inp.value.trim().toUpperCase();
+  if(validateTrialCode(up)){
+    initTrial(up);updatePlanChip();closeModal('planModal');
+    toast('🎉 Trial ativado! 7 dias ilimitados!','ok');inp.value='';
+  } else if(['AON-ANUAL-2025','AON-ANUAL-2026','DEMO'].includes(up)){
+    currentPlan='anual';localStorage.setItem('sag_plan','anual');
+    updatePlanChip();closeModal('planModal');
+    toast('Plano Anual ativado!','ok');inp.value='';
+  } else {
+    toast('Código inválido. Use o código enviado (AON-BETA-XXX)','err');
+  }
+}
+
+function saveHist(concept, data){
+  try{
+    const hist=JSON.parse(localStorage.getItem('sag_hist')||'[]');
+    hist.unshift({ts:Date.now(),concept:concept.substring(0,80),data});
+    if(hist.length>20)hist.pop();
+    localStorage.setItem('sag_hist',JSON.stringify(hist));
+  }catch(e){}
+}
+
+function cleanURL(){window.history.replaceState({},document.title,window.location.pathname);}
+
+function checkStripeReturn(){
+  const p=new URLSearchParams(window.location.search);
+  if(p.get('success')==='1'){
+    currentPlan='anual';localStorage.setItem('sag_plan','anual');
+    updatePlanChip();updateGenBtnLabel();
+    toast('✅ Pagamento confirmado! Plano Anual ativado!','ok');cleanURL();
+  }
+  if(p.get('trial')==='1'){setTimeout(()=>{openModal('planModal');},800);}
+}
+
+function startStripeCheckout(e){
+  if(e&&e.stopPropagation)e.stopPropagation();
+  // Redirect to Hotmart payment link
+  const payLink='https://pay.archonapp.com.br/anual';
+  window.open(payLink,'_blank');
+}
+
+function compareAIs(){
+  toast('Comparador de IAs em breve!','info');
+}
+
+function closeUpgradeWall(){
+  const w=document.getElementById('upgradeWall');
+  if(w)w.style.display='none';
+}
+
 // ── TRIAL & PLAN STATE ──
 let currentPlan = localStorage.getItem('sag_plan') || 'free';
 
@@ -1761,6 +1907,166 @@ async function analyzeImagesForBriefing(){
 }
 
 // ── GENERATE PROMPTS ──
+
+function renderResults(data){
+  const hasVP=!!viewportData, hasMood=moodImages.length>0, hasPlan=!!window._floorPlanBriefing;
+  const attachFiles=[hasVP?'📐 Viewport 3D':'',hasMood?`🖼 Moodboard (${moodImages.length})`:'' ,hasPlan?'📋 Planta Baixa':''].filter(Boolean);
+
+  const PLATS=[
+    {key:'gemini',icon:'⬡',label:'Gemini'},
+    {key:'midjourney',icon:'◈',label:'Midjourney'},
+    {key:'dalle',icon:'◎',label:'DALL·E'},
+    {key:'ideogram',icon:'◐',label:'Ideogram'},
+    {key:'leonardo',icon:'◑',label:'Leonardo'},
+    {key:'kling',icon:'▶',label:'Kling'}
+  ];
+
+  let html='';
+
+  // Summary box
+  if(data.summary){
+    html+=`<div class="sumbox">${data.summary}</div>`;
+  }
+
+  // File attachment banner
+  if(attachFiles.length){
+    html+=`<div style="margin-bottom:8px;padding:10px 13px;background:rgba(63,139,196,.06);border:1px solid rgba(63,139,196,.25);border-radius:6px;display:flex;align-items:flex-start;gap:9px">
+      <div style="font-size:16px;flex-shrink:0">📎</div>
+      <div>
+        <div style="font-family:var(--fd);font-size:11px;font-weight:700;letter-spacing:.5px;color:#3F8BC4;margin-bottom:3px">Arquivos detectados — anexe junto ao prompt</div>
+        <div style="font-family:var(--fm);font-size:10px;color:var(--tx2);line-height:1.7">
+          Você enviou: <strong style="color:var(--tx)">${attachFiles.join(' · ')}</strong><br>
+          Ao usar qualquer plataforma, <strong>anexe também estes arquivos</strong> para resultados fiéis ao projeto.
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // Platform cards
+  let firstKey='';
+  PLATS.forEach(p=>{
+    const txt=data[p.key]||'';
+    if(!txt)return;
+    if(!firstKey)firstKey=p.key;
+    html+=`<div class="pcard" id="pc_${p.key}">
+      <div class="pcard-head">
+        <span class="pcard-ico">${p.icon}</span>
+        <span class="pcard-label">${p.label}</span>
+        <button class="pcard-copy" onclick="navigator.clipboard.writeText(this.closest('.pcard').querySelector('.pcard-txt').textContent);toast('Copiado!','ok')" title="Copiar">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+      </div>
+      <div class="pcard-txt">${txt}</div>
+    </div>`;
+  });
+
+  const rb=document.getElementById('resBody');
+  if(rb)rb.innerHTML=html;
+  document.getElementById('resSub').textContent='prompts gerados';
+
+  // Show copy and refine buttons
+  const cb=document.getElementById('copyBtn');
+  if(cb)cb.style.display='flex';
+  const rb2=document.getElementById('refineBtn');
+  if(rb2)rb2.style.display='block';
+  const gb=document.getElementById('geminiRefineBtn');
+  if(gb)gb.style.display='block';
+
+  // Set active prompt for copy
+  window._activePromptKey=firstKey;
+  window._activePromptData=data;
+}
+
+function copyActive(){
+  const data=window._activePromptData;
+  if(!data)return;
+  const key=window._activePromptKey||'gemini';
+  const txt=data[key]||'';
+  navigator.clipboard.writeText(txt).then(()=>toast('Copiado!','ok'));
+}
+
+async function genPrompt(){
+  const concept=document.getElementById('conceptInput').value.trim();
+  if(!concept){toast('Escreva o briefing primeiro','err');return;}
+
+  // Plan gate
+  checkPlanStatus();
+  if(currentPlan==='expired'||(currentPlan==='trial'&&isTrialExpired())){showUpgradeWall();return;}
+  if(currentPlan==='free'){const rem=getRemainingToday();if(rem<=0){showUpgradeWall();return;}}
+
+  const btn=document.getElementById('genBtn');
+  if(btn){btn.disabled=true;}
+  document.getElementById('resSub').textContent='gerando...';
+  showLoading('Gerando prompts...','Otimizando para 6 plataformas de IA');
+
+  const o=OPT[curMode];const isSet=curMode==='set';
+  const secondary=[
+    o.camera?.[sel.camera]?.val,
+    o.lens?.[sel.lens]?.val||o.pos?.[sel.lens]?.val,
+    o.scene?.[sel.scene]?.val||o.frame?.[sel.scene]?.val,
+    o.atm?.[sel.atm]?.val||o.light?.[sel.atm]?.val,
+    isSet?(OPT.set?.kelvin?.[sel.kelvin]?.val||''):''
+  ].filter(Boolean).join(', ');
+
+  const hasVP=!!viewportData, hasMood=moodImages.length>0, hasPlan=!!window._floorPlanBriefing;
+  const attachNote=[hasVP?'📐 Viewport 3D':'',hasMood?`🖼 Moodboard (${moodImages.length})`:'' ,hasPlan?'📋 Planta Baixa':''].filter(Boolean).join(' + ');
+  const moodNote = hasMood ? ` Mood/references analyzed.` : '';
+  const vpNote = hasVP ? ` 3D viewport/render provided.` : '';
+  const planNote = hasPlan ? ` Floor plan analyzed: ${(window._floorPlanBriefing||'').substring(0,200)}` : '';
+  const fileCtxNote = [
+    hasVP?'USER PROVIDED A 3D VIEWPORT — prompt must mention attaching this render as reference.':'',
+    hasMood?`USER PROVIDED ${moodImages.length} MOODBOARD IMAGE(S) — prompt must mention uploading as style references.`:'',
+    hasPlan?'USER PROVIDED A FLOOR PLAN — prompt must incorporate spatial layout.':''
+  ].filter(Boolean).join(' ');
+
+  const sys=`You are an elite ${isSet?'Set Design Director for Brazilian broadcast TV':'architectural visualization expert'} — the AI engine behind ArchOn, created by Michelangelo Mazzotta.
+
+PRIMARY LAW — THE CONCEPT DEFINES EVERYTHING:
+Every architectural element, material choice, spatial proportion, color palette and formal language must serve this concept:
+"${concept}"
+
+CONSISTENCY MANDATE: Be precise about exact materials, specific forms, spatial logic and color palette. These MUST remain identical if user refines later.
+
+Technical parameters: ${secondary}${moodNote}${vpNote}${planNote}
+${fileCtxNote?'FILE CONTEXT: '+fileCtxNote:''}
+
+Output ONLY valid JSON, no markdown:
+{"gemini":"<150-200w photorealistic, specify ALL materials and forms precisely${attachNote?' [IMPORTANTE: anexe também '+attachNote+' nesta plataforma]':''}>","midjourney":"<80-120w --ar 16:9 --v 6.1 --q 2 --style raw>","dalle":"<Photorealistic ${isSet?'broadcast':'architectural'} photography, 150w>","ideogram":"<photorealistic aspect ratio 16:9, 120w>","leonardo":"<(photorealistic:1.3)(detailed:1.2) NEGATIVE:(inconsistent:1.5), 120w>","kling":"<cinematic camera movement, 100w>","summary":"<2-3 sentences PT-BR describing the project DNA — materials, forms, palette>"}`;
+
+  try{
+    const raw=await callAPI(sys, concept, 2000);
+    let data;
+    try{
+      const s=raw.indexOf('{'),e=raw.lastIndexOf('}');
+      data=JSON.parse(raw.substring(s,e+1));
+    }catch(pe){
+      data={gemini:raw,midjourney:raw,dalle:raw,ideogram:raw,leonardo:raw,kling:raw,summary:'Prompts gerados.'};
+    }
+
+    // Lock project DNA
+    if(!window._projectDNA||window._lastConcept!==concept){
+      window._projectDNA={concept,gemini:data.gemini||'',midjourney:data.midjourney||'',dalle:data.dalle||'',ideogram:data.ideogram||'',leonardo:data.leonardo||'',kling:data.kling||''};
+      window._lastConcept=concept;
+      window._refineCount=0;
+    }
+
+    window._varPrompts=data;
+    renderResults(data);
+    if(currentPlan==='free'){incDailyCount();}
+    updateGenBtnLabel();
+    saveHist(concept,data);
+
+  }catch(err){
+    hideLoading();
+    document.getElementById('resSub').textContent='erro — tente novamente';
+    const rb=document.getElementById('resBody');
+    if(rb)rb.innerHTML=`<div class="sumbox" style="color:var(--err)">Erro: ${err.message||'Falha na API'}</div>`;
+    toast('Erro: '+String(err.message||'').substring(0,50),'err');
+  }finally{
+    hideLoading();
+    if(btn){btn.disabled=false;updateGenBtnLabel();}
+  }
+}
 
 // ── UPGRADE WALL — shown when free limit is hit ──
 function showUpgradeWall(){
